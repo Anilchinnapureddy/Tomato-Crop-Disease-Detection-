@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tomato Crop Disease Detection Using CNN Algorithm</title>
+    <meta name="description"
+        content="AI-based tomato crop disease detection system using a Convolutional Neural Network (CNN) to diagnose foliar diseases with confidence scores and agricultural care suggestions.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <!-- Main Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <div class="app-wrapper">
+        <!-- Top Navigation Bar -->
+        <header class="navbar">
+            <div class="nav-container">
+                <div class="nav-brand">
+                    <span class="brand-icon">🍅</span>
+                    <div class="brand-text">
+                        <span class="brand-title">AgriVision AI</span>
+                        <span class="brand-tag">Tomato Disease Diagnosis</span>
+                    </div>
+                </div>
+                <div class="nav-status">
+                    {% if model_status.loaded %}
+                    <span class="status-pill status-online" title="CNN Model is ready for inference">
+                        <span class="status-dot"></span> Model Ready ({{ model_status.class_count }} Classes)
+                    </span>
+                    {% else %}
+                    <span class="status-pill status-offline" title="Model weights not detected">
+                        <span class="status-dot"></span> Model Not Loaded
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Container -->
+        <main class="main-container">
+            <!-- Hero Header Section -->
+            <section class="hero-section">
+                <div class="badge-header">Deep Learning • Convolutional Neural Network</div>
+                <h1 class="hero-title">Tomato Crop Disease Detection Using CNN</h1>
+                <p class="hero-subtitle">
+                    Upload a photograph of a tomato leaf to detect pathogens, leaf blights, and viral infections using
+                    an automated CNN vision pipeline. Get instant disease classification, confidence scores, and
+                    eco-friendly agricultural care suggestions.
+                </p>
+            </section>
+
+            <!-- Status Alert for Missing Model -->
+            {% if not model_status.loaded %}
+            <div class="alert-banner alert-warning" id="modelWarningBanner">
+                <div class="alert-icon">⚠️</div>
+                <div class="alert-content">
+                    <h4 class="alert-heading">CNN Model Not Found</h4>
+                    <p>The trained model weights are currently missing at <code>model/tomato_disease_model.keras</code>.
+                        Please run the training script in your terminal to train and export the model:</p>
+                    <pre class="code-snippet">python train_model.py</pre>
+                    <p class="sub-hint">Or run <code>python setup_sample_data.py</code> first to populate test sample
+                        images.</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Error Banner -->
+            {% if error_message %}
+            <div class="alert-banner alert-danger" id="serverErrorBanner">
+                <div class="alert-icon">❌</div>
+                <div class="alert-content">
+                    <h4 class="alert-heading">Notice</h4>
+                    <p>{{ error_message }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Interactive Diagnostic Grid -->
+            <div class="diagnostic-grid">
+                <!-- Left Column: Upload & Inspection Card -->
+                <div class="card upload-card">
+                    <div class="card-header">
+                        <h2 class="card-title">1. Upload Leaf Image</h2>
+                        <span class="card-step">Step 1</span>
+                    </div>
+                    <div class="card-body">
+                        <form id="predictionForm" action="/predict" method="POST" enctype="multipart/form-data">
+                            <!-- Drag and Drop Dropzone -->
+                            <div class="dropzone" id="dropzone">
+                                <input type="file" id="fileInput" name="file" accept=".jpg,.jpeg,.png"
+                                    class="file-input-hidden" required>
+
+                                <div class="dropzone-content" id="dropzonePrompt">
+                                    <div class="upload-icon-wrapper">
+                                        <svg class="upload-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="17 8 12 3 7 8"></polyline>
+                                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                                        </svg>
+                                    </div>
+                                    <p class="dropzone-text"><strong>Click to browse</strong> or drag & drop leaf image
+                                    </p>
+                                    <p class="dropzone-hint">Supports JPG, JPEG, PNG (Max: 10 MB)</p>
+                                </div>
+
+                                <!-- Image Preview Container -->
+                                <div class="preview-container hidden" id="previewContainer">
+                                    <img id="imagePreview" class="image-preview" src="" alt="Selected leaf preview">
+                                    <div class="preview-overlay">
+                                        <button type="button" class="btn-icon" id="removeImageBtn"
+                                            title="Remove selected image">✕</button>
+                                    </div>
+                                    <div class="preview-info" id="previewFileInfo"></div>
+                                </div>
+                            </div>
+
+                            <!-- Client-side Error Message Container -->
+                            <div class="client-error hidden" id="clientError"></div>
+
+                            <!-- Action Buttons -->
+                            <div class="action-buttons">
+                                <button type="submit" class="btn btn-primary" id="predictBtn" {% if not
+                                    model_status.loaded %}disabled{% endif %}>
+                                    <span class="btn-text">Predict Disease</span>
+                                    <span class="btn-spinner hidden" id="btnSpinner"></span>
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="resetBtn">Reset</button>
+                            </div>
+                        </form>
+
+                        <!-- Supported Classes Accordion / Badges -->
+                        <div class="classes-preview">
+                            <h4 class="classes-heading">Target Diagnosed Classes (10 Conditions):</h4>
+                            <div class="class-chips">
+                                <span class="chip chip-healthy">Tomato Healthy</span>
+                                <span class="chip">Bacterial Spot</span>
+                                <span class="chip">Early Blight</span>
+                                <span class="chip">Late Blight</span>
+                                <span class="chip">Leaf Mold</span>
+                                <span class="chip">Septoria Leaf Spot</span>
+                                <span class="chip">Spider Mites</span>
+                                <span class="chip">Target Spot</span>
+                                <span class="chip">Mosaic Virus</span>
+                                <span class="chip">Yellow Leaf Curl Virus</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Results Card -->
+                <div class="card result-card" id="resultSection">
+                    <div class="card-header">
+                        <h2 class="card-title">2. CNN Diagnostic Results</h2>
+                        <span class="card-step">Step 2</span>
+                    </div>
+                    <div class="card-body">
+                        <!-- Loading State -->
+                        <div class="loading-state hidden" id="loadingState">
+                            <div class="spinner-pulse"></div>
+                            <h3 class="loading-title">Analyzing Foliar Features...</h3>
+                            <p class="loading-desc">CNN feature extractors are inspecting leaf tissue textures, lesions,
+                                and pigmentation patterns.</p>
+                        </div>
+
+                        <!-- Empty State (Initial) -->
+                        <div class="empty-state {% if result %}hidden{% endif %}" id="emptyState">
+                            <div class="empty-illustration">🍃</div>
+                            <h3 class="empty-title">Awaiting Leaf Inspection</h3>
+                            <p class="empty-desc">Upload a tomato leaf photograph and click <strong>"Predict
+                                    Disease"</strong> to see AI classification, confidence metrics, and organic care
+                                advice.</p>
+                        </div>
+
+                        <!-- Prediction Result Container -->
+                        <div class="prediction-results {% if not result %}hidden{% endif %}" id="predictionResults">
+                            <!-- Low Confidence Warning Banner -->
+                            <div class="alert-banner alert-warning {% if not result or not result.is_low_confidence %}hidden{% endif %}"
+                                id="lowConfidenceAlert">
+                                <div class="alert-icon">⚠️</div>
+                                <div class="alert-content">
+                                    <h4 class="alert-heading">Low Confidence Warning</h4>
+                                    <p id="lowConfidenceText">
+                                        {% if result and result.low_confidence_message %}
+                                        {{ result.low_confidence_message }}
+                                        {% else %}
+                                        The model is not sufficiently confident in this prediction. Please upload a
+                                        clear tomato leaf image.
+                                        {% endif %}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Diagnosis Header Banner -->
+                            <div class="diagnosis-banner" id="diagnosisBanner">
+                                <div class="diagnosis-main">
+                                    <span class="badge-status badge-{{ result.badge_color if result else 'danger' }}"
+                                        id="resStatusBadge">
+                                        {{ result.status if result else 'Infected' }}
+                                    </span>
+                                    <h3 class="diagnosis-name" id="resDiseaseName">{{ result.disease_name if result else
+                                        '' }}</h3>
+                                    <p class="diagnosis-scientific" id="resScientificName">Pathogen: <em>{{
+                                            result.scientific_name if result else '' }}</em></p>
+                                </div>
+                                <div class="confidence-circle-box">
+                                    <div class="confidence-val" id="resConfidenceVal">{{ result.confidence if result
+                                        else '0.0' }}%</div>
+                                    <div class="confidence-label">Confidence Score</div>
+                                </div>
+                            </div>
+
+                            <!-- Confidence Meter Bar -->
+                            <div class="confidence-meter-box">
+                                <div class="confidence-meter-header">
+                                    <span>Prediction Confidence</span>
+                                    <span id="resConfidenceText">{{ result.confidence if result else '0.0' }}%</span>
+                                </div>
+                                <div class="meter-track">
+                                    <div class="meter-fill" id="resMeterFill"
+                                        style="width: {{ result.confidence if result else 0 }}%;"></div>
+                                </div>
+                            </div>
+
+                            <!-- Two Column Overview: Image & Description -->
+                            <div class="result-details-grid">
+                                <div class="result-thumb-box">
+                                    <img id="resImage" class="result-img" src="{{ result.image_url if result else '' }}"
+                                        alt="Analyzed leaf">
+                                    <span class="thumb-label">Evaluated Leaf</span>
+                                </div>
+                                <div class="result-summary-box">
+                                    <h4 class="section-title">Clinical Description</h4>
+                                    <p id="resDescription" class="res-paragraph">{{ result.description if result else ''
+                                        }}</p>
+                                    <div class="severity-indicator">
+                                        <strong>Severity:</strong> <span id="resSeverity" class="severity-tag">{{
+                                            result.severity if result else 'Moderate' }}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tabs / Accordion for Care Details -->
+                            <div class="care-container">
+                                <!-- Symptoms Card -->
+                                <div class="info-card">
+                                    <h4 class="info-card-title">🔍 Identified Symptoms</h4>
+                                    <ul id="resSymptomsList" class="custom-list">
+                                        {% if result and result.symptoms %}
+                                        {% for symptom in result.symptoms %}
+                                        <li>{{ symptom }}</li>
+                                        {% endfor %}
+                                        {% endif %}
+                                    </ul>
+                                </div>
+
+                                <!-- Prevention & Cultural Care -->
+                                <div class="info-card">
+                                    <h4 class="info-card-title">🛡️ Agricultural Prevention & Care</h4>
+                                    <ul id="resPreventionList" class="custom-list">
+                                        {% if result and result.prevention %}
+                                        {% for tip in result.prevention %}
+                                        <li>{{ tip }}</li>
+                                        {% endfor %}
+                                        {% endif %}
+                                    </ul>
+                                </div>
+
+                                <!-- Immediate Action -->
+                                <div class="info-card urgent-card">
+                                    <h4 class="info-card-title">⚡ Immediate Recommended Action</h4>
+                                    <p id="resImmediateAction" class="urgent-text">{{ result.immediate_action if result
+                                        else '' }}</p>
+                                </div>
+                            </div>
+
+                            <!-- Class Probability Breakdown -->
+                            <div class="probability-breakdown" id="probabilityBreakdown">
+                                <h4 class="breakdown-title">Top Class Probability Distribution</h4>
+                                <div class="breakdown-list" id="breakdownList">
+                                    {% if result and result.top_probabilities %}
+                                    {% for item in result.top_probabilities %}
+                                    <div class="breakdown-row">
+                                        <span class="breakdown-name">{{ item.class_name }}</span>
+                                        <div class="breakdown-bar-track">
+                                            <div class="breakdown-bar-fill" style="width: {{ item.probability }}%;">
+                                            </div>
+                                        </div>
+                                        <span class="breakdown-num">{{ item.probability }}%</span>
+                                    </div>
+                                    {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technology & Architecture Feature Strip -->
+            <section class="tech-specs-strip">
+                <div class="spec-item">
+                    <div class="spec-icon">🧠</div>
+                    <div class="spec-content">
+                        <strong>Deep CNN Architecture</strong>
+                        <span>3 Conv2D Blocks • Batch Normalization • Global Avg Pooling</span>
+                    </div>
+                </div>
+                <div class="spec-item">
+                    <div class="spec-icon">📐</div>
+                    <div class="spec-content">
+                        <strong>Input Normalization</strong>
+                        <span>224 × 224 × 3 RGB Input • [0, 1] Rescaling</span>
+                    </div>
+                </div>
+                <div class="spec-item">
+                    <div class="spec-icon">🛡️</div>
+                    <div class="spec-content">
+                        <strong>Confidence Safeguards</strong>
+                        <span>60% Minimum Threshold • Out-of-Distribution Warning</span>
+                    </div>
+                </div>
+                <div class="spec-item">
+                    <div class="spec-icon">⚡</div>
+                    <div class="spec-content">
+                        <strong>Real-time Flask Backend</strong>
+                        <span>Instant PIL verification • Secure File Handling</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <p><strong>Tomato Crop Disease Detection Using CNN Algorithm</strong> • College Academic Project</p>
+                <p class="footer-sub">Designed for agricultural disease scouting and academic computer vision
+                    demonstration.</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Application Script -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>

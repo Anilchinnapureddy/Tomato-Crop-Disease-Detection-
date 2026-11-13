@@ -1,0 +1,9 @@
+venv/
+**/venv/
+__pycache__/
+*.pyc
+uploads/*
+!uploads/.gitkeep
+.env
+.ipynb_checkpoints/
+dataset/
